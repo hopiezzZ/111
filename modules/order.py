@@ -5,9 +5,33 @@ import tempfile
 import os
 from PyQt5.QtWidgets import (QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
                              QPushButton, QHBoxLayout, QHeaderView, QMessageBox,
-                             QProgressDialog, QDateEdit, QFileDialog)
+                             QProgressDialog, QDateEdit, QFileDialog, QFrame)
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 from modules.base import BaseModule, ReportThread, apply_excel_style
+
+
+class DropButton(QPushButton):
+    file_dropped = pyqtSignal(str)
+
+    def __init__(self, text='', parent=None):
+        super().__init__(text, parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.toLocalFile().lower().endswith(('.xlsx', '.xls')):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event: QDropEvent):
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if path.lower().endswith(('.xlsx', '.xls')):
+                self.file_dropped.emit(path)
+                break
 
 # ==================== 订单报表处理逻辑 ====================
 def process_extra_file(df_extra, service_name):
@@ -773,52 +797,115 @@ def process_order(df, week_start=None, week_end=None,
 class OrderModule(BaseModule):
     def init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
 
         self.current_df_mgmt = None
         self.current_df_oem = None
         self.current_df_manual = None
         self.last_dir = os.path.expanduser("~")
 
-        # 上传区域1：服务订单报表
-        self.upload_btn_1 = QPushButton("📂 请上传服务订单报表\n（点击或拖拽 Excel 文件至此）")
-        self.upload_btn_1.setMinimumHeight(80)
+        upload_card_style = (
+            "QPushButton {"
+            "  background-color: #ffffff;"
+            "  border: 2px dashed #d9d9d9;"
+            "  border-radius: 10px;"
+            "  padding: 18px 24px;"
+            "  font-size: 14px;"
+            "  color: #666666;"
+            "  text-align: left;"
+            "}"
+            "QPushButton:hover {"
+            "  border-color: #1890ff;"
+            "  background-color: #f0f8ff;"
+            "  color: #1890ff;"
+            "}"
+        )
+        upload_card_ok_style = (
+            "QPushButton {"
+            "  background-color: #f6ffed;"
+            "  border: 2px solid #b7eb8f;"
+            "  border-radius: 10px;"
+            "  padding: 18px 24px;"
+            "  font-size: 14px;"
+            "  color: #389e0d;"
+            "  text-align: left;"
+            "}"
+            "QPushButton:hover {"
+            "  border-color: #52c41a;"
+            "  background-color: #f0fff0;"
+            "}"
+        )
+
+        # ---- 上传区域 ----
+        section_label_1 = QLabel("📥  数据源文件")
+        section_label_1.setStyleSheet("font-size: 15px; font-weight: bold; color: #333333; margin-top: 4px;")
+        layout.addWidget(section_label_1)
+
+        self.upload_btn_1 = DropButton("   📂  请上传服务订单报表（必选）\n       点击选择 Excel 文件")
+        self.upload_btn_1.setMinimumHeight(72)
         self.upload_btn_1.setCursor(Qt.PointingHandCursor)
+        self.upload_btn_1.setStyleSheet(upload_card_style)
         self.upload_btn_1.clicked.connect(self.select_main_file)
+        self.upload_btn_1.file_dropped.connect(self._on_drop_file)
         layout.addWidget(self.upload_btn_1)
 
-        # 上传区域2：数据安全管理中心报表
-        self.upload_btn_2 = QPushButton("📂 请上传数据安全管理中心报表\n（点击选择 Excel 文件）")
-        self.upload_btn_2.setMinimumHeight(80)
+        self.upload_btn_2 = DropButton("   📂  请上传数据安全管理中心报表（可选）\n       点击选择 Excel 文件")
+        self.upload_btn_2.setMinimumHeight(72)
         self.upload_btn_2.setCursor(Qt.PointingHandCursor)
+        self.upload_btn_2.setStyleSheet(upload_card_style)
         self.upload_btn_2.clicked.connect(self.select_mgmt_file)
+        self.upload_btn_2.file_dropped.connect(lambda p: self._on_drop_file(p, 2))
         layout.addWidget(self.upload_btn_2)
 
-        # 上传区域3：数据安全OEM IN产品报表
-        self.upload_btn_3 = QPushButton("📂 请上传数据安全OEM IN产品报表\n（点击选择 Excel 文件）")
-        self.upload_btn_3.setMinimumHeight(80)
+        self.upload_btn_3 = DropButton("   📂  请上传数据安全OEM IN产品报表（可选）\n       点击选择 Excel 文件")
+        self.upload_btn_3.setMinimumHeight(72)
         self.upload_btn_3.setCursor(Qt.PointingHandCursor)
+        self.upload_btn_3.setStyleSheet(upload_card_style)
         self.upload_btn_3.clicked.connect(self.select_oem_file)
+        self.upload_btn_3.file_dropped.connect(lambda p: self._on_drop_file(p, 3))
         layout.addWidget(self.upload_btn_3)
 
-        # 上传区域4：手工计入表格
-        self.upload_btn_4 = QPushButton("📂 请导入手工计入表格\n（点击选择 Excel 文件）")
-        self.upload_btn_4.setMinimumHeight(80)
+        self.upload_btn_4 = DropButton("   📂  请导入手工计入表格（可选）\n       点击选择 Excel 文件")
+        self.upload_btn_4.setMinimumHeight(72)
         self.upload_btn_4.setCursor(Qt.PointingHandCursor)
+        self.upload_btn_4.setStyleSheet(upload_card_style)
         self.upload_btn_4.clicked.connect(self.select_manual_file)
+        self.upload_btn_4.file_dropped.connect(lambda p: self._on_drop_file(p, 4))
         layout.addWidget(self.upload_btn_4)
 
-        preview_label = QLabel("数据预览（前100行）")
-        preview_label.setStyleSheet("font-weight: bold; margin-top: 20px;")
-        layout.addWidget(preview_label)
+        self.upload_card_style = upload_card_style
+        self.upload_card_ok_style = upload_card_ok_style
+
+        # ---- 数据预览 ----
+        section_label_2 = QLabel("📊  数据预览")
+        section_label_2.setStyleSheet("font-size: 15px; font-weight: bold; color: #333333; margin-top: 6px;")
+        layout.addWidget(section_label_2)
+
+        preview_frame = QFrame()
+        preview_frame.setStyleSheet("QFrame { background-color: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; }")
+        preview_layout = QVBoxLayout(preview_frame)
+        preview_layout.setContentsMargins(6, 6, 6, 6)
         self.preview_table = QTableWidget()
         self.preview_table.setAlternatingRowColors(True)
-        self.preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.preview_table)
+        self.preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.preview_table.setMinimumHeight(180)
+        preview_layout.addWidget(self.preview_table)
+        layout.addWidget(preview_frame)
 
-        week_label = QLabel("📅 本周新增时间范围（起止日期）")
-        week_label.setStyleSheet("font-weight: bold; margin-top: 20px;")
-        layout.addWidget(week_label)
+        # ---- 日期范围 + 操作按钮 ----
+        bottom_card = QFrame()
+        bottom_card.setStyleSheet("QFrame { background-color: #ffffff; border: 1px solid #e8e8e8; border-radius: 8px; }")
+        bottom_layout = QVBoxLayout(bottom_card)
+        bottom_layout.setContentsMargins(16, 14, 16, 14)
+        bottom_layout.setSpacing(14)
+
+        week_label = QLabel("📅  本周新增时间范围")
+        week_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #333333;")
+        bottom_layout.addWidget(week_label)
+
         week_layout = QHBoxLayout()
+        week_layout.setSpacing(10)
         self.week_start_edit = QDateEdit()
         self.week_start_edit.setCalendarPopup(True)
         self.week_start_edit.setDisplayFormat("yyyy-MM-dd")
@@ -831,23 +918,52 @@ class OrderModule(BaseModule):
         tuesday = monday.addDays(-6)
         self.week_start_edit.setDate(tuesday)
         self.week_end_edit.setDate(monday)
-        week_layout.addWidget(QLabel("从"))
+        week_layout.addWidget(QLabel("  从"))
         week_layout.addWidget(self.week_start_edit)
         week_layout.addWidget(QLabel("至"))
         week_layout.addWidget(self.week_end_edit)
         week_layout.addStretch()
-        layout.addLayout(week_layout)
+        bottom_layout.addLayout(week_layout)
 
         btn_layout = QHBoxLayout()
-        self.generate_btn = QPushButton("📎 生成报表")
-        self.clear_btn = QPushButton("🗑 清除全部上传")
-        self.download_btn = QPushButton("⬇️ 下载报表")
+        btn_layout.setSpacing(10)
+
+        self.generate_btn = QPushButton("  生成报表")
+        self.generate_btn.setStyleSheet(
+            "QPushButton { background-color: #1890ff; color: #ffffff; border: none;"
+            "  border-radius: 6px; padding: 10px 28px; font-size: 15px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #40a9ff; }"
+            "QPushButton:pressed { background-color: #096dd9; }"
+            "QPushButton:disabled { background-color: #d9d9d9; color: #ffffff; }"
+        )
+        self.generate_btn.setCursor(Qt.PointingHandCursor)
+
+        self.clear_btn = QPushButton("  清除全部上传")
+        self.clear_btn.setStyleSheet(
+            "QPushButton { background-color: #ffffff; color: #ff4d4f; border: 1px solid #ff4d4f;"
+            "  border-radius: 6px; padding: 10px 28px; font-size: 15px; }"
+            "QPushButton:hover { color: #ffffff; background-color: #ff4d4f; }"
+        )
+        self.clear_btn.setCursor(Qt.PointingHandCursor)
+
+        self.download_btn = QPushButton("  下载报表")
         self.download_btn.setEnabled(False)
+        self.download_btn.setStyleSheet(
+            "QPushButton { background-color: #ffffff; color: #52c41a; border: 1px solid #52c41a;"
+            "  border-radius: 6px; padding: 10px 28px; font-size: 15px; }"
+            "QPushButton:hover { color: #ffffff; background-color: #52c41a; }"
+            "QPushButton:disabled { background-color: #d9d9d9; color: #ffffff; border: none; }"
+        )
+        self.download_btn.setCursor(Qt.PointingHandCursor)
+
         btn_layout.addWidget(self.generate_btn)
         btn_layout.addWidget(self.clear_btn)
         btn_layout.addWidget(self.download_btn)
         btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        bottom_layout.addLayout(btn_layout)
+
+        layout.addWidget(bottom_card)
+        layout.addStretch()
 
         self.generate_btn.clicked.connect(self.start_generate)
         self.clear_btn.clicked.connect(self.clear_all_uploads)
@@ -890,13 +1006,25 @@ class OrderModule(BaseModule):
     def select_main_file(self):
         self.select_file()
 
+    def _on_drop_file(self, path, slot=1):
+        self.last_dir = os.path.dirname(path)
+        if slot == 1:
+            self.load_file(path)
+        elif slot == 2:
+            self.load_mgmt_file(path)
+        elif slot == 3:
+            self.load_oem_file(path)
+        elif slot == 4:
+            self.load_manual_file(path)
+
     def load_file(self, file_path):
         try:
             df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
             self.current_df = df
             self.main_file_path = file_path
             fname = os.path.basename(file_path)
-            self.upload_btn_1.setText(f"✅ 服务订单报表已加载：{fname}\n（点击可重新选择）")
+            self.upload_btn_1.setText(f"   ✅  服务订单报表已加载：{fname}\n       点击可重新选择")
+            self.upload_btn_1.setStyleSheet(self.upload_card_ok_style)
             self.on_file_loaded(df)
         except Exception as e:
             QMessageBox.critical(self, "读取失败", str(e))
@@ -912,10 +1040,14 @@ class OrderModule(BaseModule):
         self.preview_table.setColumnCount(0)
         self.download_btn.setEnabled(False)
         self.current_report_path = None
-        self.upload_btn_1.setText("📂 请上传服务订单报表\n（点击或拖拽 Excel 文件至此）")
-        self.upload_btn_2.setText("📂 请上传数据安全管理中心报表\n（点击选择 Excel 文件）")
-        self.upload_btn_3.setText("📂 请上传数据安全OEM IN产品报表\n（点击选择 Excel 文件）")
-        self.upload_btn_4.setText("📂 请导入手工计入表格\n（点击选择 Excel 文件）")
+        self.upload_btn_1.setText("   📂  请上传服务订单报表（必选）\n       点击选择 Excel 文件")
+        self.upload_btn_1.setStyleSheet(self.upload_card_style)
+        self.upload_btn_2.setText("   📂  请上传数据安全管理中心报表（可选）\n       点击选择 Excel 文件")
+        self.upload_btn_2.setStyleSheet(self.upload_card_style)
+        self.upload_btn_3.setText("   📂  请上传数据安全OEM IN产品报表（可选）\n       点击选择 Excel 文件")
+        self.upload_btn_3.setStyleSheet(self.upload_card_style)
+        self.upload_btn_4.setText("   📂  请导入手工计入表格（可选）\n       点击选择 Excel 文件")
+        self.upload_btn_4.setStyleSheet(self.upload_card_style)
 
     def select_mgmt_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -957,7 +1089,8 @@ class OrderModule(BaseModule):
             df = self._read_extra_file(file_path, "数据安全管理中心报表")
             self.current_df_mgmt = df
             fname = os.path.basename(file_path)
-            self.upload_btn_2.setText(f"✅ 数据安全管理中心报表已加载：{fname}\n（点击可重新选择）")
+            self.upload_btn_2.setText(f"   ✅  数据安全管理中心报表已加载：{fname}\n       点击可重新选择")
+            self.upload_btn_2.setStyleSheet(self.upload_card_ok_style)
             self.download_btn.setEnabled(False)
             self.current_report_path = None
         except Exception as e:
@@ -968,7 +1101,8 @@ class OrderModule(BaseModule):
             df = self._read_extra_file(file_path, "数据安全OEM IN产品报表")
             self.current_df_oem = df
             fname = os.path.basename(file_path)
-            self.upload_btn_3.setText(f"✅ 数据安全OEM IN产品报表已加载：{fname}\n（点击可重新选择）")
+            self.upload_btn_3.setText(f"   ✅  数据安全OEM IN产品报表已加载：{fname}\n       点击可重新选择")
+            self.upload_btn_3.setStyleSheet(self.upload_card_ok_style)
             self.download_btn.setEnabled(False)
             self.current_report_path = None
         except Exception as e:
@@ -993,7 +1127,8 @@ class OrderModule(BaseModule):
             self.current_df_manual = sheets
             fname = os.path.basename(file_path)
             sheet_names = list(sheets.keys())
-            self.upload_btn_4.setText(f"✅ 手工计入表格已加载：{fname}\n（含 {len(sheet_names)} 个sheet，点击可重新选择）")
+            self.upload_btn_4.setText(f"   ✅  手工计入表格已加载：{fname}\n       （含 {len(sheet_names)} 个sheet，点击可重新选择）")
+            self.upload_btn_4.setStyleSheet(self.upload_card_ok_style)
             self.download_btn.setEnabled(False)
             self.current_report_path = None
         except Exception as e:
@@ -1046,15 +1181,17 @@ class OrderModule(BaseModule):
 
         totals_list = list(totals.items())
         ref_name, ref_val = totals_list[0]
-        mismatch = False
+        all_match = True
         for name, val in totals_list[1:]:
             if abs(val - ref_val) > 2:
-                mismatch = True
+                all_match = False
                 break
-        if mismatch:
-            detail = '\n'.join(f'  {n}: {int(v)}' for n, v in totals.items())
-            QMessageBox.warning(self, '数字校验不一致',
-                                f'3个sheet的总计数不一致，请联系开发人员排查！\n\n各sheet总计：\n{detail}')
+
+        detail = '\n'.join(f'    {n}:  {int(v):,} 万元' for n, v in totals.items())
+        if all_match:
+            self._validation_msg = f'✅ 数据校验通过，三个 Sheet 总计一致\n\n{detail}'
+        else:
+            self._validation_msg = f'⚠️ 数据校验不一致！\n\n{detail}\n\n差额可能由手工数据加和导致，请核对各数据源'
 
         fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
         os.close(fd)
@@ -1068,7 +1205,8 @@ class OrderModule(BaseModule):
         self.current_report_path = temp_path
         self.download_btn.setEnabled(True)
         self.generate_btn.setEnabled(True)
-        QMessageBox.information(self, "成功", "报表已生成，点击「下载报表」保存文件")
+        QMessageBox.information(self, "报表生成完毕",
+            f"报表已生成，点击「下载报表」保存文件\n\n{self._validation_msg}")
 
     def on_generate_error(self, error_msg):
         self.progress.close()
