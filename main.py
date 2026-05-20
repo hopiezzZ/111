@@ -8,7 +8,7 @@ from modules.income import IncomeModule
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("数据分析工具集")
+        self.setWindowTitle("数据分析工具集 v1.0")
         self.resize(1200, 800)
         self.setStyleSheet("""
             QMainWindow {
